@@ -1,41 +1,9 @@
 import numpy as np
 from scipy.integrate import odeint
-import lts.calculate as calculate
+import lts.initialize as initialize
+from lts.collision_operators import BGK_collision_operator
 
-def linearized_collision_operator(config, f):
-
-  mass_particle      = config.mass_particle
-  boltzmann_constant = config.boltzmann_constant
-
-  T   = config.T
-  rho = config.rho
-
-  vel_max = config.vel_max
-  N_vel_x = config.N_vel_x
-
-  tau   = config.tau
-
-  vel_x = np.linspace(-vel_max, vel_max, N_vel_x)
-  dv    = vel_x[1] - vel_x[0]
-
-  delta_T   = np.sum(f * (vel_x**2 - T)) * dv/rho
-  delta_rho = np.sum(f) * dv
-  delta_v   = np.sum(f * vel_x) * dv/rho
-  
-  expr_term_1 = np.sqrt(2 * mass_particle**3) * delta_T * rho * vel_x**2
-  expr_term_2 = 2 * np.sqrt(2 * mass_particle) * boltzmann_constant * delta_rho * T**2
-  expr_term_3 = 2 * np.sqrt(2 * mass_particle**3) * rho * delta_v * vel_x * T
-  expr_term_4 = - np.sqrt(2 * mass_particle) * boltzmann_constant * delta_T * rho * T
-  
-  C_f = (((expr_term_1 + expr_term_2 + expr_term_3 + expr_term_4)*\
-         np.exp(-mass_particle * vel_x**2/(2 * boltzmann_constant * T))/\
-         (4 * np.sqrt(np.pi * T**5 * boltzmann_constant**3)) - f
-         )/tau
-        )
-  
-  return C_f
-
-def diff_delta_f(Y, t, config):
+def ddelta_fHat_dt(Y, t, config):
 
   mass_particle      = config.mass_particle
   boltzmann_constant = config.boltzmann_constant
@@ -57,11 +25,12 @@ def diff_delta_f(Y, t, config):
   collisions_enabled = config.collisions_enabled 
   tau                = config.tau
 
-  f_r = Y[:vel_x.size]
-  f_i = Y[vel_x.size:]
+  delta_f_hat_r = Y[:vel_x.size]
+  delta_f_hat_i = Y[vel_x.size:]
 
-  int_Df_i = np.sum(f_i) * dv
-  int_Df_r = np.sum(f_r) * dv
+  delta_f_hat   = delta_f_hat_real + 1j*delta_f_hat_imag
+
+  delta_rho_hat = np.sum(delta_f_hat) * dv
 
   if(fields_enabled!="True"):
 
@@ -70,13 +39,13 @@ def diff_delta_f(Y, t, config):
 
   else:
 
-    int_Df_i = np.sum(f_i) * dv
-    int_Df_r = np.sum(f_r) * dv
+    dfdv_background = calculate.diff_f_background(config)
 
-    diff_f_background = calculate.diff_f_background(config)
+    delta_E_hat =   charge_particle # MAKE SURE THIS IS CORRECT 
+                  * (delta_rho) / (1j * kx)
 
-    fields_term_r = - charge_particle**2 *(int_Df_i * diff_f_background/wave_number)
-    fields_term_i = + charge_particle**2 *(int_Df_r * diff_f_background/wave_number)
+    fields_term =  charge_particle / mass_particle 
+                  * delta_E_hat * dfdv_background_
 
   if(collisions_enabled!="True"):
 
@@ -85,22 +54,27 @@ def diff_delta_f(Y, t, config):
 
   else:
 
-    f     = f_r + 1j * f_i
+    f     = delta_f_hat_r + 1j * delta_f_hat_i
     C_f   = linearized_collision_operator(config, f)
     C_f_r = C_f.real
     C_f_i = C_f.imag
 
-  dYdt =np.concatenate([(wave_number * vel_x * f_i)   - fields_term_r + C_f_r,\
-                         -(wave_number * vel_x * f_r) + fields_term_i + C_f_i\
+  dYdt =np.concatenate([(wave_number * vel_x * delta_f_hat_i)   -
+                         fields_term.real + C_f_r,\
+                         -(wave_number * vel_x * delta_f_hat_r) +
+                         fields_term.imag + C_f_i\
                        ], axis = 0)
   
   return dYdt
 
-def solve(config, delta_f_initial, time_array):
+def time_integration(config, delta_f_initial, time_array):
+  
   vel_max = config.vel_max
   N_vel_x = config.N_vel_x
   N_x     = config.N_x
+
   x       = np.linspace(0, 1, N_x)
+  
   k       = config.wave_number 
   vel_x   = np.linspace(-vel_max, vel_max, N_vel_x)
   dv      = vel_x[1] - vel_x[0]  
@@ -125,10 +99,10 @@ def solve(config, delta_f_initial, time_array):
                          rtol = 1e-20, atol = 1e-15
                         )[1]
     
-    rho_r = np.sum(new_delta_f[:N_vel_x])*dv
-    rho_i = np.sum(new_delta_f[N_vel_x:])*dv
+    delta_rho_hat_r = np.sum(new_delta_f[:N_vel_x])*dv
+    delta_rho_hat_i = np.sum(new_delta_f[N_vel_x:])*dv
 
-    density_data[time_index] = np.max(rho_r*np.cos(k*x) - rho_i*np.sin(k*x))
+    density_data[time_index] = np.max(delta_rho_hat_r * np.cos(k*x) - delta_rho_hat_i * np.sin(k*x))
     old_delta_f              = new_delta_f.copy()
 
   return(density_data, new_delta_f)
