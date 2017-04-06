@@ -14,7 +14,7 @@ def set(params):
 
   Output:
   -------
-    config : Class whose attributes contain all the simulation parameters. This is
+    config : Object whose attributes contain all the simulation parameters. This is
              passed to the remaining solver functions.
   """
   
@@ -22,7 +22,7 @@ def set(params):
   config.boltzmann_constant = params.constants['boltzmann_constant']
 
   config.rho_background         = params.background_electrons['rho']
-  config.temperature_background = params.background_electrons['T']
+  config.temperature_background = params.background_electrons['temperature']
   config.vel_bulk_background    = params.background_electrons['vel_bulk']
 
   config.pert_x_real = params.perturbation['pert_x_real']

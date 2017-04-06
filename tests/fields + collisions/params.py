@@ -41,7 +41,7 @@ time = dict(
            )
 
 EM_fields = dict(
-                 enabled         = 'False',
+                 enabled         = 'True',
                  charge_particle = -10.0
                 )
 
